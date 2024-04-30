@@ -111,6 +111,27 @@ def open_profile_mode(username):
     else:
         print(f"用户 {current_username} 没有档案信息")
 
+################################################################################
+def create_new_entry(entry_data):
+    entries = {"model": entry_data["model"],
+                    "name":  [],
+                    "spec":  [],
+                    "dos":   [],
+                    "unit":  [],
+                    "numbers": [],
+                    "usage": []
+                    }
+    entries["name"].append(entry_data["name"])
+    entries["spec"].append(entry_data["spec"])
+    entries["dos"].append(entry_data["dos"])
+    entries["unit"].append(entry_data["unit"])
+    entries["numbers"].append(entry_data["numbers"])
+    entries["usage"].append(entry_data["usage"])
+
+    return entries
+################################################################################
+
+
 def save_entry_data(username, entry_data):
     # 读取用户档案信息
     profiles = read_profiles()
@@ -123,11 +144,27 @@ def save_entry_data(username, entry_data):
             break
 
     if user_profile:
+        exist_model = False #用于判断是否存在相同的model
         # 将新的录入数据添加到用户的档案信息中
-        user_profile["entries"].append(entry_data)
+        for entry in user_profile["entries"]:
+            #如果有相同的model则写入其中
+            if entry["model"] == entry_data["model"]:
+                entry["name"].append(entry_data["name"])
+                entry["spec"].append(entry_data["spec"])
+                entry["dos"].append(entry_data["dos"])
+                entry["unit"].append(entry_data["unit"])
+                entry["numbers"].append(entry_data["numbers"])
+                entry["usage"].append(entry_data["usage"])
+                exist_model = True
+                break
+        if exist_model == False:
+            entry = create_new_entry(entry_data)
+            user_profile["entries"].append(entry)
     else:
         # 如果当前用户没有档案信息，则创建一个新的档案信息
-        user_profile = {"username": username, "entries": [entry_data]}
+        entries = create_new_entry(entry_data)
+
+        user_profile = {"username": username, "entries": [entries]}
         profiles.append(user_profile)
 
     # 保存更新后的用户档案信息
@@ -232,6 +269,57 @@ def open_profile_mode():
     tree.column("用法",width=40)
     tree.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
+#############################################################################################################
+    def delete_selected_content():
+        treeview_selected_item = tree.focus() #获取Treeview选中项
+        treeview_selected_index = 0 # 记录treeview中第几位
+        listbox_selected_index = listbox.curselection() # 记录listbox中第几位
+        children_item = tree.get_children() #获取treeview中所有的数据
+        
+        #查看第几位
+        for i in range(len(children_item)):
+            if children_item[i] == treeview_selected_item:
+                treeview_selected_index = i
+                break
+        # 删除profiles中的数据
+        if listbox_selected_index:
+            model = listbox.get(listbox_selected_index)
+# -------------->  如果没有选择treeview则删除listbox中选中的数据
+            if treeview_selected_item == '':
+                for profile in profiles:
+                    if profile["username"] != current_username:
+                        continue
+                    for i in range(len(profile["entries"])):
+                        if profile["entries"][i]["model"] != model:
+                            continue
+                        profile["entries"].pop(i)
+                        save_profiles(profiles)
+                        listbox.delete(listbox_selected_index)
+                        update_table("f")
+                        break
+                    return
+                 
+            # 遍历档案,找到与选中的model值匹配的并删除
+            for profile in profiles:
+                if profile["username"] != current_username:
+                    continue
+                for entry in profile["entries"]:
+                    if entry["model"] == model:
+                        entry["name"].pop(treeview_selected_index)
+                        entry["spec"].pop(treeview_selected_index)
+                        entry["dos"].pop(treeview_selected_index)
+                        entry["unit"].pop(treeview_selected_index)
+                        entry["numbers"].pop(treeview_selected_index)
+                        entry["usage"].pop(treeview_selected_index)
+                        save_profiles(profiles)
+                        # 删除treeview中的选中项
+                        tree.delete(treeview_selected_item)
+                        break
+                break 
+
+#############################################################################################################
+
+
     # 事件处理函数
     def update_table(event):
         # 清空 Treeview 表格
@@ -244,18 +332,38 @@ def open_profile_mode():
             tree.delete(*tree.get_children())  # 清空表格内容
             # 遍历档案，找到与选中的 "model" 值匹配的录入数据，并插入表格
             for profile in profiles:
-                if profile["username"] == current_username:  # 确保仅查找当前用户的档案信息
-                    for entry in profile["entries"]:
-                        if entry["model"] == model:
+                if profile["username"] != current_username:  # 确保仅查找当前用户的档案信息
+                    continue
+                for entry in profile["entries"]:
+                    if entry["model"] != model:
+                        continue
+                    for i in range(len(entry['name'])):
+                        temp = []
+                        temp.append(entry['name'][i])
+                        temp.append(entry['spec'][i])
+                        temp.append(entry['dos'][i])
+                        temp.append(entry['unit'][i])
+                        temp.append(entry['numbers'][i])
+                        temp.append(entry['usage'][i])
+                        tree.insert("", tk.END, values=temp)  # 插入对应 model 的录入数据
+                        
+                    break
+                break
                             # 仅插入除 "model" 之外的其他字段
-                            values = [entry[key] for key in entry if key != "model"]
-                            tree.insert("", tk.END, values=values)  # 插入对应 model 的录入数据
+                            #values = [entry[key] for key in entry if key != "model"]
+                            #print("type:",type(values))
+                            #print(values)
+                            #tree.insert("", tk.END, values=values)  # 插入对应 model 的录入数据
     # 绑定事件处理函数
     listbox.bind("<<ListboxSelect>>", update_table)
 
     # 创建返回按钮
     return_button = tk.Button(profile_window, text="返回", command=lambda: back_to_modes_window(profile_window))
     return_button.pack()
+    
+    # 创建删除按钮
+    delete_button = tk.Button(profile_window, text="删除", command=delete_selected_content)
+    delete_button.pack()
 
     profile_window.mainloop()
 
