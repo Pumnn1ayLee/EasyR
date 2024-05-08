@@ -27,6 +27,37 @@ profile_file = os.path.join(data_folder,"profiles.json")
 #全局变量,当前用户登录用户名
 current_username = None
 
+#########################################单向列表结构，保存每次删除的数据，用于撤回####################
+#定义一个链表结构，用于存储每一次删除的东西
+class recall_event_node:
+    
+    def __init__(self,Type,Location,data):
+        if Type != 1 and Type != 0 :
+            return
+        self.type = Type      # 0表示listbox 1表示treeview
+        self.location = Location  #之前所在的位置
+        self.data = data
+        self.next = None
+
+class recall_event_linkedlist:
+    def __init__(self):
+        self.head = None
+    # 插入节点
+    def insert(self,Type,Location,data):
+        Node = recall_event_node(Type,Location,data)
+        Node.next = self.head
+        self.head = Node
+    # 使用一次撤回之后
+    def pop(self):
+        if self == None:
+            return
+        self.head = self.head.next
+
+################################################################################################
+
+# 定义一个全局的撤回操作
+recall_tree = recall_event_linkedlist()
+
 def register():
     username = username_entry.get()
     password = password_entry.get()
@@ -292,6 +323,10 @@ def open_profile_mode():
                     for i in range(len(profile["entries"])):
                         if profile["entries"][i]["model"] != model:
                             continue
+                        
+                        # 插入recall_tree
+                        recall_tree.insert(0,i,profile["entries"][i])
+                        
                         profile["entries"].pop(i)
                         save_profiles(profiles)
                         listbox.delete(listbox_selected_index)
@@ -305,6 +340,18 @@ def open_profile_mode():
                     continue
                 for entry in profile["entries"]:
                     if entry["model"] == model:
+                        # 插入recall_tree
+                        recall_tree.insert(1,
+                                           treeview_selected_index,
+                                           {
+                                             "model":entry["model"],
+                                             "name":entry["name"][treeview_selected_index],
+                                             "spec":entry["spec"][treeview_selected_index],
+                                             "dos":entry["dos"][treeview_selected_index],
+                                             "unit":entry["unit"][treeview_selected_index],
+                                             "numbers":entry["numbers"][treeview_selected_index],
+                                             "usage":entry["usage"][treeview_selected_index]
+                                             })
                         entry["name"].pop(treeview_selected_index)
                         entry["spec"].pop(treeview_selected_index)
                         entry["dos"].pop(treeview_selected_index)
@@ -318,7 +365,61 @@ def open_profile_mode():
                 break 
 
 #############################################################################################################
+    # 撤回操作
+    def recall():
+        node = recall_tree.head
+        # 如果没有撤回操作则直接返回
+        if node == None:
+            return
+#entry_data = {
+#        "model":"",
+#        "name": "",
+#        "spec": "",
+#        "dos": "",
+#        "unit" : "",
+#        "numbers": "",
+#        "usage": "",
+#        }
+        #上面这是保存的格式
+        recall_tree.pop()
+        node.next = None
+        
+        #如果此数据属于listbox
+        if node.type == 0:
+           for profile in profiles:
+               if profile["username"] != current_username:
+                   continue
+               profile['entries'].insert(node.location,node.data)
+               listbox.insert(node.location,node.data['model'])
+               break
+        #反之属于treeview
+        else :
+           for profile in profiles:
+               if profile["username"] != current_username:
+                   continue
+               for entry in profile['entries']:
+                   if entry['model'] != node.data['model']:
+                       continue
+                   entry['name'].insert(node.location,node.data['name'])
+                   entry['spec'].insert(node.location,node.data['spec'])
+                   entry['dos'].insert(node.location,node.data['dos'])
+                   entry['unit'].insert(node.location,node.data['unit'])
+                   entry['numbers'].insert(node.location,node.data['numbers'])
+                   entry['usage'].insert(node.location,node.data['usage'])
+                   temp = []
+                   temp.append(node.data['name'])
+                   temp.append(node.data['spec'])
+                   temp.append(node.data['dos'])
+                   temp.append(node.data['unit'])
+                   temp.append(node.data['numbers'])
+                   temp.append(node.data['usage'])
 
+                   
+                   tree.insert("",node.location,values=temp)
+                   break
+               break
+        save_profiles(profiles)
+#############################################################################################################
 
     # 事件处理函数
     def update_table(event):
@@ -364,7 +465,11 @@ def open_profile_mode():
     # 创建删除按钮
     delete_button = tk.Button(profile_window, text="删除", command=delete_selected_content)
     delete_button.pack()
-
+    
+    # 创建撤回按钮
+    recall_button = tk.Button(profile_window, text="撤回", command=recall)
+    recall_button.pack()
+    
     profile_window.mainloop()
 
 def open_entry_mode():
@@ -453,6 +558,7 @@ def open_entry_mode():
 
 # 返回到模式选择窗口
 def back_to_modes_window(window_to_close):
+    recall_tree.head = None
     global mode_window
     # 关闭当前窗口
     window_to_close.destroy()
